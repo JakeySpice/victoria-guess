@@ -18,27 +18,32 @@ export const TIER_LABELS: Record<Tier, string> = {
   smalltown: 'Small Town',
 };
 
-export type RoundStatus = 'playing' | 'correct' | 'struck_out';
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+export type RoundStatus = 'guessing' | 'revealed';
 
 export interface RoundState {
   place: Place;
   status: RoundStatus;
-  strikes: number;
-  revealedHints: number;
-  zoomOuts: number;
-  wrongGuesses: number;
-  scoreEarned: number;
-  hintsUsed: number;
+  /** Where the player dropped their pin (null until they submit). */
+  guess: LatLng | null;
+  /** Straight-line distance from the guess to the true location, in km. */
+  distanceKm: number | null;
+  /** Points earned this round. */
+  score: number;
 }
 
 export type SessionStatus = 'idle' | 'playing' | 'finished';
 
 export interface SessionStats {
-  correct: number;
-  struckOut: number;
-  totalHints: number;
-  totalZoomOuts: number;
-  totalWrong: number;
+  rounds: number;
+  totalScore: number;
+  bestDistanceKm: number | null;
+  avgDistanceKm: number | null;
+  bullseyes: number;
 }
 
 export interface SessionState {
@@ -46,5 +51,4 @@ export interface SessionState {
   rounds: RoundState[];
   currentIndex: number;
   totalScore: number;
-  deck: Place[];
 }

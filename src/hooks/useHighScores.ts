@@ -1,42 +1,45 @@
 import { useCallback, useEffect, useState } from 'react';
-import { HIGH_SCORE_DEFAULT, HIGH_SCORE_KEY } from '../game/scoring';
-import type { Tier } from '../game/types';
+import { HIGH_SCORE_KEY } from '../game/scoring';
 
-type HighScores = Record<Tier, number>;
-
-function read(): HighScores {
+function read(): number {
   try {
     const raw = localStorage.getItem(HIGH_SCORE_KEY);
-    if (!raw) return { ...HIGH_SCORE_DEFAULT };
-    const parsed = JSON.parse(raw) as Partial<HighScores>;
-    return { ...HIGH_SCORE_DEFAULT, ...parsed };
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) ? n : 0;
   } catch {
-    return { ...HIGH_SCORE_DEFAULT };
+    return 0;
   }
 }
 
-function write(scores: HighScores): void {
+function write(best: number): void {
   try {
-    localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify(scores));
+    localStorage.setItem(HIGH_SCORE_KEY, String(best));
   } catch {
     /* ignore quota / privacy errors */
   }
 }
 
-export function useHighScores() {
-  const [scores, setScores] = useState<HighScores>(() => read());
+/** Tracks the best session total across plays. */
+export function useHighScore() {
+  const [best, setBest] = useState<number>(() => read());
 
   useEffect(() => {
-    write(scores);
-  }, [scores]);
+    write(best);
+  }, [best]);
 
-  const update = useCallback((tier: Tier, score: number) => {
-    setScores((prev) => (score > prev[tier] ? { ...prev, [tier]: score } : prev));
-  }, []);
+  /** Record a finished session; returns true if it set a new record. */
+  const submit = useCallback(
+    (total: number): boolean => {
+      if (total > best) {
+        setBest(total);
+        return true;
+      }
+      return false;
+    },
+    [best],
+  );
 
-  const reset = useCallback(() => {
-    setScores({ ...HIGH_SCORE_DEFAULT });
-  }, []);
+  const reset = useCallback(() => setBest(0), []);
 
-  return { scores, update, reset };
+  return { best, submit, reset };
 }

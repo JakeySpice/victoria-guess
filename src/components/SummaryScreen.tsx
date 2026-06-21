@@ -1,67 +1,57 @@
-import { SCORING } from '../game/scoring';
 import { summarise } from '../game/GameEngine';
-import { TIER_LABELS } from '../game/types';
-import type { SessionState, Tier } from '../game/types';
-import type { HighScores } from './types';
+import { SCORING, formatKm } from '../game/scoring';
+import type { SessionState } from '../game/types';
 
 interface Props {
   session: SessionState;
-  highScores: HighScores;
+  best: number;
+  isNewBest: boolean;
   onPlayAgain: () => void;
   onHome: () => void;
 }
 
 export function SummaryScreen({
   session,
-  highScores,
+  best,
+  isNewBest,
   onPlayAgain,
   onHome,
 }: Props) {
   const stats = summarise(session);
-
-  // figure out which tiers the player used in this session
-  const tiersUsed = Array.from(
-    new Set(session.rounds.map((r) => r.place.tier)),
-  ) as Tier[];
+  const maxPossible = SCORING.ROUNDS_PER_SESSION * SCORING.MAX_ROUND_POINTS;
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
-        <h2 className="text-2xl font-bold text-slate-800">Session complete</h2>
-        <div className="mt-4 text-5xl font-bold text-emerald-700">
+        <h2 className="text-2xl font-bold text-slate-800">Game complete</h2>
+
+        {isNewBest && (
+          <div className="mt-2 inline-block rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+            🏆 New best!
+          </div>
+        )}
+
+        <div className="mt-3 text-5xl font-extrabold text-emerald-600">
           {session.totalScore}
+          <span className="ml-2 align-middle text-base font-medium text-slate-400">
+            / {maxPossible}
+          </span>
         </div>
-        <p className="text-sm text-slate-500">Final score</p>
+        <p className="text-sm text-slate-500">
+          Final score · best game {best}
+        </p>
 
         <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-          <Stat label="Correct" value={`${stats.correct} / ${session.rounds.length}`} />
-          <Stat label="Struck out" value={stats.struckOut} />
-          <Stat label="Hints used" value={stats.totalHints} />
-          <Stat label="Zoom-outs" value={stats.totalZoomOuts} />
-          <Stat label="Wrong guesses" value={stats.totalWrong} />
+          <Stat label="Bullseyes" value={`${stats.bullseyes} / ${stats.rounds}`} />
           <Stat
-            label="Best possible"
-            value={session.rounds.length * (SCORING.STARTING_SCORE + SCORING.CORRECT_AWARD)}
+            label="Closest guess"
+            value={stats.bestDistanceKm === null ? '—' : `${formatKm(stats.bestDistanceKm)} km`}
           />
-        </div>
-
-        <div className="mt-5 border-t border-slate-200 pt-4">
-          <h3 className="text-sm font-semibold text-slate-600">
-            High scores touched this session
-          </h3>
-          <ul className="mt-2 space-y-1 text-sm">
-            {tiersUsed.map((tier) => (
-              <li key={tier} className="flex justify-between">
-                <span>{TIER_LABELS[tier]}</span>
-                <span className="font-semibold text-slate-800">
-                  {highScores[tier]}
-                </span>
-              </li>
-            ))}
-            {tiersUsed.length === 0 && (
-              <li className="text-slate-500">No tiers played.</li>
-            )}
-          </ul>
+          <Stat
+            label="Average miss"
+            value={stats.avgDistanceKm === null ? '—' : `${formatKm(stats.avgDistanceKm)} km`}
+          />
+          <Stat label="Rounds" value={stats.rounds} />
         </div>
 
         <div className="mt-6 flex gap-3">

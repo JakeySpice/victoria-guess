@@ -667,7 +667,3 @@ export const PLACES: Place[] = [
     ],
   },
 ];
-
-export function placesByTier(tier: import('./types').Tier): Place[] {
-  return PLACES.filter((p) => p.tier === tier);
-}

@@ -1,15 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-  applyGuess,
-  applyHint,
-  applyZoomOut,
   advanceToNextRound,
   createSession,
   initialSession,
+  submitGuess as submitGuessEngine,
 } from '../game/GameEngine';
-import type { RoundOutcome, } from '../game/GameEngine';
+import type { GuessOutcome } from '../game/GameEngine';
 import { SCORING } from '../game/scoring';
-import type { SessionState } from '../game/types';
+import type { LatLng, SessionState } from '../game/types';
 
 export function useGame() {
   const [state, setState] = useState<SessionState>(() => initialSession());
@@ -28,35 +26,13 @@ export function useGame() {
   );
 
   const submitGuess = useCallback(
-    (guess: string): RoundOutcome => {
-      let outcome: RoundOutcome = {
-        kind: 'wrong',
-        strikes: 0,
-        remaining: 0,
-      };
-      setState((s) => {
-        const { state: next, outcome: o } = applyGuess(s, guess);
-        outcome = o;
-        return next;
-      });
+    (guess: LatLng): GuessOutcome | null => {
+      const { state: next, outcome } = submitGuessEngine(state, guess);
+      setState(next);
       return outcome;
     },
-    [],
+    [state],
   );
-
-  const revealHint = useCallback(() => {
-    let revealed: string | null = null;
-    setState((s) => {
-      const { state: next, revealed: r } = applyHint(s);
-      revealed = r;
-      return next;
-    });
-    return revealed;
-  }, []);
-
-  const reportZoomOut = useCallback((deltaLevels: number) => {
-    setState((s) => applyZoomOut(s, deltaLevels));
-  }, []);
 
   const nextRound = useCallback(() => {
     setState((s) => advanceToNextRound(s));
@@ -70,8 +46,6 @@ export function useGame() {
     start,
     reset,
     submitGuess,
-    revealHint,
-    reportZoomOut,
     nextRound,
   };
 }
