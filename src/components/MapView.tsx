@@ -16,6 +16,7 @@ import {
   VICTORIA_CENTER,
 } from '../game/scoring';
 import type { LatLng, RoundState } from '../game/types';
+import { nearbyPlaces } from '../game/progress';
 
 interface Props {
   round: RoundState;
@@ -73,6 +74,7 @@ export function MapView({ round, pendingGuess, onPlace }: Props) {
   const revealed = round.status === 'revealed';
   const truth = { lat: round.place.lat, lng: round.place.lng };
   const guess = revealed ? round.guess : pendingGuess;
+  const neighbours = revealed ? nearbyPlaces(round.place, 5) : [];
 
   return (
     <MapContainer
@@ -120,6 +122,21 @@ export function MapView({ round, pendingGuess, onPlace }: Props) {
 
       {revealed && (
         <>
+          {/* Faint context markers so the answer is learned in its
+              neighbourhood, not in isolation (§6.4). */}
+          {neighbours.map((n) => (
+            <CircleMarker
+              key={n.id}
+              center={[n.lat, n.lng]}
+              radius={4}
+              pathOptions={{
+                color: '#94a3b8',
+                fillColor: '#94a3b8',
+                fillOpacity: 0.3,
+                weight: 1,
+              }}
+            />
+          ))}
           <CircleMarker
             center={[truth.lat, truth.lng]}
             radius={9}

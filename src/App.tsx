@@ -4,19 +4,38 @@ import { MapView } from './components/MapView';
 import { ScoreBar } from './components/ScoreBar';
 import { ResultModal } from './components/ResultModal';
 import { SummaryScreen } from './components/SummaryScreen';
+import { MasteryMap } from './components/MasteryMap';
 import { useGame } from './hooks/useGame';
 import { useProgress } from './hooks/useProgress';
 import { summarise } from './game/GameEngine';
 import { TIER_LABELS } from './game/types';
 import type { LatLng } from './game/types';
 import type { PlaceStat } from './game/progress';
+import type { SelectRoundsOptions } from './game/GameEngine';
 
 export default function App() {
-  const game = useGame();
-  const { summary, masteries, getPlaceStat, recordRound, recordGame, reset } =
-    useProgress();
+  const {
+    progress,
+    summary,
+    masteries,
+    coverage,
+    getPlaceStat,
+    recordRound,
+    recordGame,
+    reset,
+    exportProgress,
+    importProgress,
+    queueForReview,
+    unqueueFromReview,
+    placeDetail,
+    dayStreak,
+    milestones,
+    clearMilestones,
+  } = useProgress();
+  const game = useGame(progress);
   const [pendingGuess, setPendingGuess] = useState<LatLng | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
+  const [view, setView] = useState<'home' | 'masteryMap'>('home');
   // Snapshot of the current place's record *before* this round, so the reveal
   // can show "you usually land X km off" without counting the round twice.
   const [priorStat, setPriorStat] = useState<PlaceStat | undefined>(undefined);
@@ -42,18 +61,32 @@ export default function App() {
     }
   }, [game.state, summary.bestGame, recordGame]);
 
-  const handleStart = useCallback(() => {
-    setPendingGuess(null);
-    setPriorStat(undefined);
-    setIsNewBest(false);
-    game.start();
-  }, [game]);
+  const handleStart = useCallback(
+    (opts: SelectRoundsOptions = { mode: 'quick' }) => {
+      setPendingGuess(null);
+      setPriorStat(undefined);
+      setIsNewBest(false);
+      clearMilestones();
+      game.start(opts);
+    },
+    [game, clearMilestones],
+  );
 
   const handleHome = useCallback(() => {
     setPendingGuess(null);
     setPriorStat(undefined);
+    clearMilestones();
     game.reset();
-  }, [game]);
+  }, [game, clearMilestones]);
+
+  const handleOpenMasteryMap = useCallback(() => {
+    if (game.state.status !== 'idle') return;
+    setView('masteryMap');
+  }, [game.state.status]);
+
+  const handleBackHome = useCallback(() => {
+    setView('home');
+  }, []);
 
   const handlePlace = useCallback((g: LatLng) => {
     setPendingGuess(g);
@@ -66,7 +99,13 @@ export default function App() {
     setPriorStat(getPlaceStat(round.place.id));
     const outcome = game.submitGuess(pendingGuess);
     if (outcome) {
-      recordRound(outcome.place.id, outcome.distanceKm, outcome.score);
+      recordRound(
+        outcome.place.id,
+        outcome.distanceKm,
+        outcome.score,
+        pendingGuess,
+        { lat: outcome.place.lat, lng: outcome.place.lng },
+      );
     }
   }, [game, pendingGuess, getPlaceStat, recordRound]);
 
@@ -77,13 +116,31 @@ export default function App() {
   }, [game]);
 
   if (game.state.status === 'idle') {
+    if (view === 'masteryMap') {
+      return (
+        <div className="flex h-full flex-col bg-slate-100">
+          <MasteryMap
+            progress={progress}
+            onQueue={queueForReview}
+            onUnqueue={unqueueFromReview}
+            placeDetail={placeDetail}
+            onBack={handleBackHome}
+          />
+        </div>
+      );
+    }
     return (
       <div className="flex h-full flex-col bg-slate-100">
         <StartScreen
           summary={summary}
           masteries={masteries}
+          coverage={coverage}
+          dayStreak={dayStreak}
           onStart={handleStart}
           onResetProgress={reset}
+          onExport={exportProgress}
+          onImport={importProgress}
+          onOpenMasteryMap={handleOpenMasteryMap}
         />
       </div>
     );
@@ -96,6 +153,8 @@ export default function App() {
           session={game.state}
           summary={summary}
           isNewBest={isNewBest}
+          milestones={milestones}
+          onDismissMilestones={clearMilestones}
           onPlayAgain={handleStart}
           onHome={handleHome}
         />
@@ -113,7 +172,7 @@ export default function App() {
   }
 
   const revealed = round.status === 'revealed';
-  const isLast = game.roundNumber >= game.totalRounds;
+  const isLast = game.roundNumber >= game.totalRounds || game.state.failed;
 
   return (
     <div className="flex h-full flex-col bg-slate-100">
@@ -122,6 +181,7 @@ export default function App() {
         totalRounds={game.totalRounds}
         totalScore={game.state.totalScore}
         best={summary.bestGame}
+        mode={game.state.mode}
       />
 
       <div className={`relative flex-1 ${revealed ? '' : 'guessing'}`}>
@@ -149,6 +209,10 @@ export default function App() {
             priorStat={priorStat}
             onNext={handleNext}
             isLast={isLast}
+            progress={progress}
+            onQueue={queueForReview}
+            onUnqueue={unqueueFromReview}
+            queued={priorStat?.queued ?? false}
           />
         )}
       </div>
