@@ -6,14 +6,22 @@ import {
   exportProgress as exportProgressFn,
   importProgress as importProgressFn,
   loadProgress,
+  placeDetail as placeDetailFn,
   placeMasteries,
+  queueForReview as queueForReviewFn,
   recordGame as recordGameFn,
   recordRound as recordRoundFn,
   regionalRollup,
   saveProgress,
   summariseProgress,
+  unqueueFromReview as unqueueFromReviewFn,
 } from '../game/progress';
-import type { GameRecord, PlaceStat, Progress } from '../game/progress';
+import type {
+  GameRecord,
+  PlaceDetail,
+  PlaceStat,
+  Progress,
+} from '../game/progress';
 
 /**
  * Owns the persistent learning record: rolling-average form, trend, and
@@ -63,6 +71,25 @@ export function useProgress() {
     [progress.places],
   );
 
+  const queueForReview = useCallback(
+    (id: string) => {
+      persist((p) => queueForReviewFn(p, id));
+    },
+    [persist],
+  );
+
+  const unqueueFromReview = useCallback(
+    (id: string) => {
+      persist((p) => unqueueFromReviewFn(p, id));
+    },
+    [persist],
+  );
+
+  const placeDetail = useCallback(
+    (id: string): PlaceDetail | null => placeDetailFn(progress, id),
+    [progress],
+  );
+
   const exportProgress = useCallback(
     () => exportProgressFn(progress),
     [progress],
@@ -91,5 +118,8 @@ export function useProgress() {
     reset,
     exportProgress,
     importProgress,
+    queueForReview,
+    unqueueFromReview,
+    placeDetail,
   };
 }

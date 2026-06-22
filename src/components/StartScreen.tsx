@@ -22,6 +22,7 @@ interface Props {
   onResetProgress: () => void;
   onExport: () => string;
   onImport: (json: string) => boolean;
+  onOpenMasteryMap: () => void;
 }
 
 const TREND_META: Record<Trend, { icon: string; cls: string; label: string }> = {
@@ -83,6 +84,7 @@ export function StartScreen({
   onResetProgress,
   onExport,
   onImport,
+  onOpenMasteryMap,
 }: Props) {
   const [showAll, setShowAll] = useState(false);
   const [mode, setMode] = useState<GameMode>('quick');
@@ -318,6 +320,15 @@ export function StartScreen({
           className="rounded-lg bg-emerald-600 px-6 py-3 font-semibold text-white shadow hover:bg-emerald-700"
         >
           {hasProgress ? 'Play again' : 'Start Game'}
+        </button>
+        <button
+          onClick={onOpenMasteryMap}
+          className="rounded-lg border border-emerald-300 bg-white px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm hover:bg-emerald-50"
+        >
+          Mastery map
+          <span className="ml-1.5 text-xs font-normal text-slate-500">
+            · {coverage.seen}/{coverage.total} discovered
+          </span>
         </button>
         {hasProgress && (
           <button

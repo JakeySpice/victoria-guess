@@ -1,6 +1,6 @@
-import { PLACE_BY_ID, REGIONS, placesInRegion } from './places';
+import { PLACE_BY_ID, REGIONS, placesInRegion, scaleKmFor } from './places';
 import { SCORING } from './scoring';
-import type { RegionId } from './types';
+import type { RegionId, Tier } from './types';
 
 /**
  * Persistent learning record. Two things are tracked:
@@ -26,6 +26,9 @@ const DEFAULT_EMA_KM = 50;
 /** Fallback scale (km) when a place has no `scaleKm` (density normaliser). */
 const DEFAULT_SCALE_KM = 50;
 
+/** Milliseconds in one day. Exported for the engine / UI due-date math. */
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
 export interface PlaceStat {
   plays: number;
   /** Sum of guess distances (km) — divide by plays for the average miss. */
@@ -46,6 +49,8 @@ export interface PlaceStat {
   intervalDays?: number;
   /** Mean signed guess offset, for future bias detection. */
   meanOffset?: { dLat: number; dLng: number };
+  /** Player-flagged for the "study this place" review queue (§6.4). */
+  queued?: boolean;
 }
 
 export interface GameRecord {
@@ -100,6 +105,7 @@ function normaliseV2(parsed: Partial<Progress>): Progress {
     };
     if (s.intervalDays !== undefined) stat.intervalDays = s.intervalDays;
     if (s.meanOffset !== undefined) stat.meanOffset = s.meanOffset;
+    if (s.queued !== undefined) stat.queued = s.queued;
     places[id] = stat;
   }
   return { version: 2, games, places };
@@ -120,7 +126,7 @@ export function migrateV1toV2(old: Partial<Progress>): Progress {
     if (!s || typeof s !== 'object') continue;
     const plays = s.plays ?? 0;
     const totalKm = s.totalKm ?? 0;
-    places[id] = {
+    const stat: PlaceStat = {
       plays,
       totalKm,
       bestKm: s.bestKm ?? 0,
@@ -130,6 +136,8 @@ export function migrateV1toV2(old: Partial<Progress>): Progress {
       lastPlayedAt: latestAt,
       streak: 0,
     };
+    if (s.queued !== undefined) stat.queued = s.queued;
+    places[id] = stat;
   }
   return { version: 2, games, places };
 }
@@ -185,6 +193,7 @@ export function recordRound(
   };
   if (cur?.intervalDays !== undefined) next.intervalDays = cur.intervalDays;
   if (cur?.meanOffset !== undefined) next.meanOffset = cur.meanOffset;
+  if (cur?.queued !== undefined) next.queued = cur.queued;
   return { ...prev, places: { ...prev.places, [placeId]: next } };
 }
 
@@ -192,6 +201,95 @@ export function recordRound(
 export function recordGame(prev: Progress, game: GameRecord): Progress {
   const games = [...prev.games, game].slice(-MAX_GAMES);
   return { ...prev, games };
+}
+
+/**
+ * Flag a place for the "study this place" review queue (§6.4). Creates a
+ * zero-play stub if the place has never been seen, so it can be queued before
+ * being played. No-op-safe: always returns a new Progress.
+ */
+export function queueForReview(prev: Progress, id: string): Progress {
+  const cur = prev.places[id];
+  const stat: PlaceStat = cur
+    ? { ...cur, queued: true }
+    : {
+        plays: 0,
+        totalKm: 0,
+        bestKm: 0,
+        lastKm: 0,
+        totalScore: 0,
+        emaKm: DEFAULT_EMA_KM,
+        lastPlayedAt: 0,
+        streak: 0,
+        queued: true,
+      };
+  return { ...prev, places: { ...prev.places, [id]: stat } };
+}
+
+/** Remove a place from the review queue, preserving all other stat fields. */
+export function unqueueFromReview(prev: Progress, id: string): Progress {
+  const cur = prev.places[id];
+  if (!cur) return prev;
+  const next: PlaceStat = { ...cur };
+  delete next.queued;
+  return { ...prev, places: { ...prev.places, [id]: next } };
+}
+
+export interface PlaceDetail {
+  id: string;
+  name: string;
+  tier: Tier;
+  region: RegionId;
+  lat: number;
+  lng: number;
+  scaleKm: number;
+  plays: number;
+  bestKm: number;
+  lastKm: number;
+  emaKm: number;
+  streak: number;
+  lastPlayedAt: number;
+  queued: boolean;
+  level: MasteryLevel;
+  e: number;
+  dueInDays: number | null;
+}
+
+/**
+ * Aggregate per-place view for the mastery map UI: static place metadata plus
+ * the learner's stat block, normalised error, mastery level, and a heuristic
+ * "due in days" value (positive = overdue). Returns null for unknown ids.
+ */
+export function placeDetail(p: Progress, id: string): PlaceDetail | null {
+  const place = PLACE_BY_ID[id];
+  if (!place) return null;
+  const s = p.places[id];
+  const plays = s?.plays ?? 0;
+  const scaleKm = scaleKmFor(place);
+  const emaKm = s?.emaKm ?? DEFAULT_EMA_KM;
+  const e = emaKm / scaleKm;
+  const lastPlayedAt = s?.lastPlayedAt ?? 0;
+  const dueInDays =
+    plays > 0 ? Math.floor((Date.now() - lastPlayedAt) / DAY_MS) : null;
+  return {
+    id,
+    name: place.name,
+    tier: place.tier,
+    region: place.region,
+    lat: place.lat,
+    lng: place.lng,
+    scaleKm,
+    plays,
+    bestKm: s?.bestKm ?? 0,
+    lastKm: s?.lastKm ?? 0,
+    emaKm,
+    streak: s?.streak ?? 0,
+    lastPlayedAt,
+    queued: s?.queued === true,
+    level: masteryFor(e),
+    e,
+    dueInDays,
+  };
 }
 
 export type Trend = 'up' | 'down' | 'flat';

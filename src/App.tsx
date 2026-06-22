@@ -4,6 +4,7 @@ import { MapView } from './components/MapView';
 import { ScoreBar } from './components/ScoreBar';
 import { ResultModal } from './components/ResultModal';
 import { SummaryScreen } from './components/SummaryScreen';
+import { MasteryMap } from './components/MasteryMap';
 import { useGame } from './hooks/useGame';
 import { useProgress } from './hooks/useProgress';
 import { summarise } from './game/GameEngine';
@@ -24,10 +25,14 @@ export default function App() {
     reset,
     exportProgress,
     importProgress,
+    queueForReview,
+    unqueueFromReview,
+    placeDetail,
   } = useProgress();
   const game = useGame(progress);
   const [pendingGuess, setPendingGuess] = useState<LatLng | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
+  const [view, setView] = useState<'home' | 'masteryMap'>('home');
   // Snapshot of the current place's record *before* this round, so the reveal
   // can show "you usually land X km off" without counting the round twice.
   const [priorStat, setPriorStat] = useState<PlaceStat | undefined>(undefined);
@@ -69,6 +74,15 @@ export default function App() {
     game.reset();
   }, [game]);
 
+  const handleOpenMasteryMap = useCallback(() => {
+    if (game.state.status !== 'idle') return;
+    setView('masteryMap');
+  }, [game.state.status]);
+
+  const handleBackHome = useCallback(() => {
+    setView('home');
+  }, []);
+
   const handlePlace = useCallback((g: LatLng) => {
     setPendingGuess(g);
   }, []);
@@ -91,6 +105,19 @@ export default function App() {
   }, [game]);
 
   if (game.state.status === 'idle') {
+    if (view === 'masteryMap') {
+      return (
+        <div className="flex h-full flex-col bg-slate-100">
+          <MasteryMap
+            progress={progress}
+            onQueue={queueForReview}
+            onUnqueue={unqueueFromReview}
+            placeDetail={placeDetail}
+            onBack={handleBackHome}
+          />
+        </div>
+      );
+    }
     return (
       <div className="flex h-full flex-col bg-slate-100">
         <StartScreen
@@ -101,6 +128,7 @@ export default function App() {
           onResetProgress={reset}
           onExport={exportProgress}
           onImport={importProgress}
+          onOpenMasteryMap={handleOpenMasteryMap}
         />
       </div>
     );
