@@ -138,6 +138,25 @@ function compass8(deg: number): string {
   return COMPASS[idx];
 }
 
+export interface BearingDescription {
+  bearing: string;
+  magnitudeKm: number;
+}
+
+export function bearingDescription(
+  dLat: number,
+  dLng: number,
+  refLat: number = VICTORIA_CENTER[0],
+): BearingDescription {
+  const kmPerDegLat = 111;
+  const kmPerDegLng = 111 * Math.cos((refLat * Math.PI) / 180);
+  const northKm = dLat * kmPerDegLat;
+  const eastKm = dLng * kmPerDegLng;
+  const magnitudeKm = Math.sqrt(northKm * northKm + eastKm * eastKm);
+  const deg = (Math.atan2(eastKm, northKm) * 180) / Math.PI;
+  return { bearing: COMPASS_WORDS[compass8(deg)], magnitudeKm };
+}
+
 export interface LocationDescription {
   /** Plain-language orientation, e.g. "95 km west of Ballarat". Null if the
    *  place basically *is* an anchor (too close to describe by bearing). */

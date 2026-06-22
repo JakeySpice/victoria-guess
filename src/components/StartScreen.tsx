@@ -18,6 +18,7 @@ interface Props {
   summary: ProgressSummary;
   masteries: PlaceMastery[];
   coverage: CoverageStats;
+  dayStreak: number;
   onStart: (opts: SelectRoundsOptions) => void;
   onResetProgress: () => void;
   onExport: () => string;
@@ -80,6 +81,7 @@ export function StartScreen({
   summary,
   masteries,
   coverage,
+  dayStreak,
   onStart,
   onResetProgress,
   onExport,
@@ -136,7 +138,14 @@ export function StartScreen({
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 overflow-y-auto p-6 text-center">
       <div className="max-w-xl">
-        <h1 className="text-4xl font-bold text-slate-800">Victoria Guess</h1>
+        <div className="flex items-center justify-center gap-3">
+          <h1 className="text-4xl font-bold text-slate-800">Victoria Guess</h1>
+          {dayStreak > 0 && (
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700 ring-1 ring-amber-300">
+              🔥 {dayStreak}-day streak
+            </span>
+          )}
+        </div>
         <p className="mt-2 text-slate-600">
           We'll name a place in Victoria. Click the map where you think it is —
           the closer your pin, the more points you score.

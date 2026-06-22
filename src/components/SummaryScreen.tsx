@@ -5,13 +5,15 @@ import {
   ratingForDistance,
   type RatingTone,
 } from '../game/scoring';
-import { RECENT_WINDOW, type ProgressSummary } from '../game/progress';
+import { RECENT_WINDOW, type ProgressSummary, type Milestone } from '../game/progress';
 import type { SessionState } from '../game/types';
 
 interface Props {
   session: SessionState;
   summary: ProgressSummary;
   isNewBest: boolean;
+  milestones: Milestone[];
+  onDismissMilestones: () => void;
   onPlayAgain: () => void;
   onHome: () => void;
 }
@@ -31,6 +33,8 @@ export function SummaryScreen({
   session,
   summary,
   isNewBest,
+  milestones,
+  onDismissMilestones,
   onPlayAgain,
   onHome,
 }: Props) {
@@ -45,9 +49,30 @@ export function SummaryScreen({
   const baseAvg = prior.length ? mean(prior) : null;
   const delta = baseAvg !== null ? Math.round(session.totalScore - baseAvg) : null;
 
+  const handlePlayAgain = () => {
+    onDismissMilestones();
+    onPlayAgain();
+  };
+  const handleHome = () => {
+    onDismissMilestones();
+    onHome();
+  };
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 overflow-y-auto p-6">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
+        {milestones.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {milestones.map((m, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-300"
+              >
+                {m.type === 'place-mastered' ? '🏆' : '🗺️'} {m.name}
+              </span>
+            ))}
+          </div>
+        )}
         {endlessFailed ? (
           <>
             <h2 className="text-2xl font-bold text-slate-800">Run ended</h2>
@@ -153,13 +178,13 @@ export function SummaryScreen({
 
         <div className="mt-6 flex gap-3">
           <button
-            onClick={onPlayAgain}
+            onClick={handlePlayAgain}
             className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700"
           >
             Play again
           </button>
           <button
-            onClick={onHome}
+            onClick={handleHome}
             className="rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-600 hover:bg-slate-50"
           >
             Home

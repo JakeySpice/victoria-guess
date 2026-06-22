@@ -7,7 +7,7 @@ import {
   ratingForDistance,
   scoreForDistance,
 } from './scoring';
-import { emptyProgress } from './progress';
+import { DAY_MS, emptyProgress } from './progress';
 import type { Progress, PlaceStat } from './progress';
 import type {
   GameMode,
@@ -19,8 +19,6 @@ import type {
   SessionStats,
   SessionStatus,
 } from './types';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const MAX_NORMALISED_ERROR = 10;
 const MAX_DUE_DAYS = 30;
@@ -74,7 +72,7 @@ function normalisedError(place: Place, stat: PlaceStat | undefined): number {
 
 function dueness(stat: PlaceStat | undefined, now: number): number {
   if (!stat || stat.plays === 0 || stat.lastPlayedAt === 0) return 0;
-  const days = (now - stat.lastPlayedAt) / DAY_MS;
+  const days = (now - stat.lastPlayedAt) / DAY_MS - (stat.intervalDays ?? 0);
   return Math.min(Math.max(days, 0), MAX_DUE_DAYS);
 }
 

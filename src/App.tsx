@@ -28,6 +28,9 @@ export default function App() {
     queueForReview,
     unqueueFromReview,
     placeDetail,
+    dayStreak,
+    milestones,
+    clearMilestones,
   } = useProgress();
   const game = useGame(progress);
   const [pendingGuess, setPendingGuess] = useState<LatLng | null>(null);
@@ -63,16 +66,18 @@ export default function App() {
       setPendingGuess(null);
       setPriorStat(undefined);
       setIsNewBest(false);
+      clearMilestones();
       game.start(opts);
     },
-    [game],
+    [game, clearMilestones],
   );
 
   const handleHome = useCallback(() => {
     setPendingGuess(null);
     setPriorStat(undefined);
+    clearMilestones();
     game.reset();
-  }, [game]);
+  }, [game, clearMilestones]);
 
   const handleOpenMasteryMap = useCallback(() => {
     if (game.state.status !== 'idle') return;
@@ -94,7 +99,13 @@ export default function App() {
     setPriorStat(getPlaceStat(round.place.id));
     const outcome = game.submitGuess(pendingGuess);
     if (outcome) {
-      recordRound(outcome.place.id, outcome.distanceKm, outcome.score);
+      recordRound(
+        outcome.place.id,
+        outcome.distanceKm,
+        outcome.score,
+        pendingGuess,
+        { lat: outcome.place.lat, lng: outcome.place.lng },
+      );
     }
   }, [game, pendingGuess, getPlaceStat, recordRound]);
 
@@ -124,6 +135,7 @@ export default function App() {
           summary={summary}
           masteries={masteries}
           coverage={coverage}
+          dayStreak={dayStreak}
           onStart={handleStart}
           onResetProgress={reset}
           onExport={exportProgress}
@@ -141,6 +153,8 @@ export default function App() {
           session={game.state}
           summary={summary}
           isNewBest={isNewBest}
+          milestones={milestones}
+          onDismissMilestones={clearMilestones}
           onPlayAgain={handleStart}
           onHome={handleHome}
         />
@@ -194,6 +208,10 @@ export default function App() {
             priorStat={priorStat}
             onNext={handleNext}
             isLast={isLast}
+            progress={progress}
+            onQueue={queueForReview}
+            onUnqueue={unqueueFromReview}
+            queued={priorStat?.queued ?? false}
           />
         )}
       </div>

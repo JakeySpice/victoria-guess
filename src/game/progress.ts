@@ -1,6 +1,6 @@
-import { PLACE_BY_ID, REGIONS, placesInRegion, scaleKmFor } from './places';
-import { SCORING } from './scoring';
-import type { RegionId, Tier } from './types';
+import { PLACE_BY_ID, PLACES, REGIONS, placesInRegion, scaleKmFor } from './places';
+import { bearingDescription, haversineKm, ratingForDistance, SCORING } from './scoring';
+import type { LatLng, Place, RegionId, Tier } from './types';
 
 /**
  * Persistent learning record. Two things are tracked:
@@ -28,6 +28,9 @@ const DEFAULT_SCALE_KM = 50;
 
 /** Milliseconds in one day. Exported for the engine / UI due-date math. */
 export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Upper bound on the SM-2 / Leitner review interval (days). */
+export const MAX_INTERVAL_DAYS = 60;
 
 export interface PlaceStat {
   plays: number;
@@ -176,11 +179,46 @@ export function recordRound(
   placeId: string,
   distanceKm: number,
   score: number,
+  guess?: LatLng,
+  truth?: LatLng,
 ): Progress {
   const cur = prev.places[placeId];
   const prevEma = cur?.emaKm ?? distanceKm;
   const emaKm = EMA_ALPHA * distanceKm + (1 - EMA_ALPHA) * prevEma;
   const newStreak = distanceKm <= 50 ? (cur?.streak ?? 0) + 1 : 0;
+
+  const tone = ratingForDistance(distanceKm).tone;
+  const prevInterval = cur?.intervalDays;
+  let intervalDays: number;
+  if (tone === 'great') {
+    intervalDays = prevInterval !== undefined
+      ? Math.min(prevInterval * 2, MAX_INTERVAL_DAYS)
+      : 3;
+  } else if (tone === 'good') {
+    intervalDays = prevInterval !== undefined
+      ? Math.min(prevInterval * 1.3, MAX_INTERVAL_DAYS)
+      : 2;
+  } else if (tone === 'ok') {
+    intervalDays = Math.min(Math.max(1, (prevInterval ?? 1) * 1.1), MAX_INTERVAL_DAYS);
+  } else {
+    intervalDays = 1;
+  }
+
+  let meanOffset: { dLat: number; dLng: number } | undefined;
+  if (guess && truth) {
+    const dLat = guess.lat - truth.lat;
+    const dLng = guess.lng - truth.lng;
+    const prev = cur?.meanOffset;
+    meanOffset = prev
+      ? {
+          dLat: EMA_ALPHA * dLat + (1 - EMA_ALPHA) * prev.dLat,
+          dLng: EMA_ALPHA * dLng + (1 - EMA_ALPHA) * prev.dLng,
+        }
+      : { dLat, dLng };
+  } else if (cur?.meanOffset !== undefined) {
+    meanOffset = cur.meanOffset;
+  }
+
   const next: PlaceStat = {
     plays: (cur?.plays ?? 0) + 1,
     totalKm: (cur?.totalKm ?? 0) + distanceKm,
@@ -190,9 +228,9 @@ export function recordRound(
     emaKm,
     lastPlayedAt: Date.now(),
     streak: newStreak,
+    intervalDays,
   };
-  if (cur?.intervalDays !== undefined) next.intervalDays = cur.intervalDays;
-  if (cur?.meanOffset !== undefined) next.meanOffset = cur.meanOffset;
+  if (meanOffset !== undefined) next.meanOffset = meanOffset;
   if (cur?.queued !== undefined) next.queued = cur.queued;
   return { ...prev, places: { ...prev.places, [placeId]: next } };
 }
@@ -484,5 +522,127 @@ export function importProgress(json: string): Progress | null {
     return null;
   }
 }
+
+/**
+ * Count consecutive calendar days (ending today or yesterday) on which at
+ * least one game was played. A gap > 1 day breaks the streak.
+ */
+export function dayStreak(p: Progress): number {
+  if (p.games.length === 0) return 0;
+  const days = new Set<number>();
+  for (const g of p.games) days.add(Math.floor(g.at / DAY_MS));
+  const today = Math.floor(Date.now() / DAY_MS);
+  let last = -1;
+  for (const d of days) if (d > last) last = d;
+  if (last < today - 1) return 0;
+  let streak = 0;
+  let cursor = last;
+  while (days.has(cursor)) {
+    streak++;
+    cursor--;
+  }
+  return streak;
+}
+
+export interface Milestone {
+  type: 'place-mastered' | 'region-complete';
+  placeId?: string;
+  regionId?: string;
+  name: string;
+}
+
+function isMastered(p: Progress, id: string): boolean {
+  const s = p.places[id];
+  if (!s || s.plays === 0) return false;
+  return masteryFor(s.emaKm / scaleForPlaceId(id)) === 'mastered';
+}
+
+function seenCountInRegion(p: Progress, regionId: RegionId): number {
+  let seen = 0;
+  for (const place of placesInRegion(regionId)) {
+    const s = p.places[place.id];
+    if (s && s.plays > 0) seen++;
+  }
+  return seen;
+}
+
+/**
+ * Compare before/after progress and emit milestones crossed by the latest
+ * action: a place crossing into `'mastered'`, or a region's last unseen place
+ * being played for the first time.
+ */
+export function detectMilestones(prev: Progress, next: Progress): Milestone[] {
+  const out: Milestone[] = [];
+  for (const [id, s] of Object.entries(next.places)) {
+    if (!s || s.plays === 0) continue;
+    if (!isMastered(prev, id) && isMastered(next, id)) {
+      const place = PLACE_BY_ID[id];
+      out.push({ type: 'place-mastered', placeId: id, name: place?.name ?? id });
+    }
+  }
+  for (const { id: regionId, name } of REGIONS) {
+    const total = placesInRegion(regionId).length;
+    if (total === 0) continue;
+    const prevSeen = seenCountInRegion(prev, regionId);
+    const nextSeen = seenCountInRegion(next, regionId);
+    if (prevSeen < total && nextSeen >= total) {
+      out.push({ type: 'region-complete', regionId, name });
+    }
+  }
+  return out;
+}
+
+export interface BiasInfo {
+  dLat: number;
+  dLng: number;
+  bearing: string;
+  magnitudeKm: number;
+  consistent: boolean;
+}
+
+/**
+ * Systematic-guess-bias report for a place: the average signed offset of the
+ * player's guess from the truth, expressed as a compass bearing + magnitude.
+ * Returns null until the place has been played ≥3 times and has a mean offset.
+ */
+export function biasFor(p: Progress, id: string): BiasInfo | null {
+  const s = p.places[id];
+  if (!s || s.plays < 3 || !s.meanOffset) return null;
+  const { dLat, dLng } = s.meanOffset;
+  const place = PLACE_BY_ID[id];
+  const refLat = place?.lat ?? -36.8;
+  const { bearing, magnitudeKm } = bearingDescription(dLat, dLng, refLat);
+  return { dLat, dLng, bearing, magnitudeKm, consistent: magnitudeKm > 20 };
+}
+
+/**
+ * The `n` mastered-or-strong places nearest to `target` — useful as reference
+ * anchors the player already knows when nudging them toward an unfamiliar spot.
+ */
+export function masteredAnchors(p: Progress, target: LatLng, n: number): Place[] {
+  const masteries = placeMasteries(p);
+  const ids = new Set(
+    masteries
+      .filter((m) => m.level === 'mastered' || m.level === 'strong')
+      .map((m) => m.id),
+  );
+  return PLACES
+    .filter((pl) => ids.has(pl.id))
+    .map((pl) => ({ pl, d: haversineKm(target, { lat: pl.lat, lng: pl.lng }) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, n)
+    .map((x) => x.pl);
+}
+
+/** The `n` places nearest to `target` (excluding itself), by haversine. */
+export function nearbyPlaces(target: Place, n: number): Place[] {
+  return PLACES
+    .filter((pl) => pl.id !== target.id)
+    .map((pl) => ({ pl, d: haversineKm({ lat: target.lat, lng: target.lng }, { lat: pl.lat, lng: pl.lng }) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, n)
+    .map((x) => x.pl);
+}
+
 
 
