@@ -21,8 +21,6 @@ export const INITIAL_ZOOM = 6;
 export const MIN_ZOOM = 6;
 export const MAX_ZOOM = 12;
 
-export const HIGH_SCORE_KEY = 'vic-guess-best-v2';
-
 function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
@@ -65,4 +63,78 @@ export function ratingForDistance(km: number): Rating {
 /** Format a distance for display: one decimal when very close, else whole km. */
 export function formatKm(km: number): string {
   return km < 10 ? km.toFixed(1) : String(Math.round(km));
+}
+
+/**
+ * Well-known reference points used to describe where the answer sits
+ * (e.g. "≈ 95 km west of Ballarat"). Kept short and spread across the state
+ * so almost any place has a familiar anchor nearby.
+ */
+const ANCHORS: { name: string; lat: number; lng: number }[] = [
+  { name: 'Melbourne', lat: -37.8136, lng: 144.9631 },
+  { name: 'Geelong', lat: -38.1475, lng: 144.3617 },
+  { name: 'Ballarat', lat: -37.5622, lng: 143.8498 },
+  { name: 'Bendigo', lat: -36.7578, lng: 144.2805 },
+  { name: 'Shepparton', lat: -36.3801, lng: 145.3972 },
+  { name: 'Wodonga', lat: -36.1214, lng: 146.8881 },
+  { name: 'Wangaratta', lat: -36.3895, lng: 146.3086 },
+  { name: 'Traralgon', lat: -38.1975, lng: 146.8206 },
+  { name: 'Bairnsdale', lat: -37.8255, lng: 147.61 },
+  { name: 'Warrnambool', lat: -38.3845, lng: 142.4805 },
+  { name: 'Hamilton', lat: -37.7447, lng: 142.0233 },
+  { name: 'Horsham', lat: -36.7139, lng: 142.2004 },
+  { name: 'Mildura', lat: -34.1848, lng: 142.1623 },
+  { name: 'Swan Hill', lat: -35.338, lng: 143.5544 },
+];
+
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+const COMPASS_WORDS: Record<string, string> = {
+  N: 'north',
+  NE: 'north-east',
+  E: 'east',
+  SE: 'south-east',
+  S: 'south',
+  SW: 'south-west',
+  W: 'west',
+  NW: 'north-west',
+};
+
+/** Initial bearing from a → b, in degrees (0 = north, clockwise). */
+function bearingDeg(a: LatLng, b: LatLng): number {
+  const φ1 = toRad(a.lat);
+  const φ2 = toRad(b.lat);
+  const Δλ = toRad(b.lng - a.lng);
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) -
+    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
+
+function compass8(deg: number): string {
+  const idx = Math.round(((deg % 360) + 360) / 45) % 8;
+  return COMPASS[idx];
+}
+
+export interface LocationDescription {
+  /** Plain-language orientation, e.g. "95 km west of Ballarat". Null if the
+   *  place basically *is* an anchor (too close to describe by bearing). */
+  text: string | null;
+}
+
+/**
+ * Describe a target relative to the nearest well-known town, so the reveal
+ * teaches *where* the place is rather than just naming it.
+ */
+export function describeLocation(target: LatLng): LocationDescription {
+  let best: { name: string; km: number } | null = null;
+  for (const a of ANCHORS) {
+    const km = haversineKm(target, a);
+    if (!best || km < best.km) best = { name: a.name, km };
+  }
+  if (!best || best.km < 8) return { text: null };
+
+  const anchor = ANCHORS.find((a) => a.name === best!.name)!;
+  const dir = COMPASS_WORDS[compass8(bearingDeg(anchor, target))];
+  return { text: `${formatKm(best.km)} km ${dir} of ${best.name}` };
 }

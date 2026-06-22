@@ -1,18 +1,35 @@
 import { summarise } from '../game/GameEngine';
-import { SCORING, formatKm } from '../game/scoring';
+import {
+  SCORING,
+  formatKm,
+  ratingForDistance,
+  type RatingTone,
+} from '../game/scoring';
+import { RECENT_WINDOW, type ProgressSummary } from '../game/progress';
 import type { SessionState } from '../game/types';
 
 interface Props {
   session: SessionState;
-  best: number;
+  summary: ProgressSummary;
   isNewBest: boolean;
   onPlayAgain: () => void;
   onHome: () => void;
 }
 
+const TONE_TEXT: Record<RatingTone, string> = {
+  great: 'text-emerald-600',
+  good: 'text-lime-600',
+  ok: 'text-amber-600',
+  poor: 'text-rose-500',
+};
+
+function mean(ns: number[]): number {
+  return ns.reduce((a, b) => a + b, 0) / ns.length;
+}
+
 export function SummaryScreen({
   session,
-  best,
+  summary,
   isNewBest,
   onPlayAgain,
   onHome,
@@ -20,8 +37,14 @@ export function SummaryScreen({
   const stats = summarise(session);
   const maxPossible = SCORING.ROUNDS_PER_SESSION * SCORING.MAX_ROUND_POINTS;
 
+  // Compare this game to your form *before* it (the just-finished game is the
+  // last entry in recentScores, so drop it to get a fair baseline).
+  const prior = summary.recentScores.slice(0, -1).slice(-RECENT_WINDOW);
+  const baseAvg = prior.length ? mean(prior) : null;
+  const delta = baseAvg !== null ? Math.round(session.totalScore - baseAvg) : null;
+
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
+    <div className="flex h-full flex-col items-center justify-center gap-6 overflow-y-auto p-6">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
         <h2 className="text-2xl font-bold text-slate-800">Game complete</h2>
 
@@ -37,21 +60,75 @@ export function SummaryScreen({
             / {maxPossible}
           </span>
         </div>
+
         <p className="text-sm text-slate-500">
-          Final score · best game {best}
+          {delta !== null ? (
+            <>
+              {delta >= 0 ? (
+                <span className="font-semibold text-emerald-600">
+                  +{delta}
+                </span>
+              ) : (
+                <span className="font-semibold text-rose-500">{delta}</span>
+              )}{' '}
+              vs your recent average · best {summary.bestGame}
+            </>
+          ) : (
+            <>Your first game — this sets your baseline.</>
+          )}
         </p>
 
         <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
           <Stat label="Bullseyes" value={`${stats.bullseyes} / ${stats.rounds}`} />
           <Stat
             label="Closest guess"
-            value={stats.bestDistanceKm === null ? '—' : `${formatKm(stats.bestDistanceKm)} km`}
+            value={
+              stats.bestDistanceKm === null
+                ? '—'
+                : `${formatKm(stats.bestDistanceKm)} km`
+            }
           />
           <Stat
             label="Average miss"
-            value={stats.avgDistanceKm === null ? '—' : `${formatKm(stats.avgDistanceKm)} km`}
+            value={
+              stats.avgDistanceKm === null
+                ? '—'
+                : `${formatKm(stats.avgDistanceKm)} km`
+            }
           />
-          <Stat label="Rounds" value={stats.rounds} />
+          <Stat
+            label={`Avg · last ${RECENT_WINDOW}`}
+            value={summary.recentAvg !== null ? Math.round(summary.recentAvg) : '—'}
+          />
+        </div>
+
+        {/* Round-by-round recap — the places to revisit and study. */}
+        <div className="mt-5">
+          <div className="text-xs uppercase tracking-wide text-slate-500">
+            This round's places
+          </div>
+          <ul className="mt-2 divide-y divide-slate-100">
+            {session.rounds.map((r) => {
+              const km = r.distanceKm ?? 0;
+              const rating = ratingForDistance(km);
+              return (
+                <li
+                  key={r.place.id}
+                  className="flex items-center justify-between py-1.5 text-sm"
+                >
+                  <span className="truncate text-slate-700">{r.place.name}</span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className={`font-medium ${TONE_TEXT[rating.tone]}`}>
+                      {formatKm(km)} km
+                    </span>
+                    <span className="w-10 text-right font-semibold text-slate-500">
+                      +{r.score}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
 
         <div className="mt-6 flex gap-3">

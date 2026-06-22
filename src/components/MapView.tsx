@@ -4,6 +4,7 @@ import {
   TileLayer,
   CircleMarker,
   Polyline,
+  Tooltip,
   useMap,
   useMapEvents,
 } from 'react-leaflet';
@@ -56,7 +57,13 @@ function FitResult({
         [aLat, aLng],
         [bLat, bLng],
       ],
-      { padding: [70, 70], maxZoom: MAX_ZOOM, animate: true },
+      {
+        // Extra room at the bottom so the result sheet never covers the markers.
+        paddingTopLeft: [60, 70],
+        paddingBottomRight: [60, 250],
+        maxZoom: MAX_ZOOM,
+        animate: true,
+      },
     );
   }, [aLat, aLng, bLat, bLng, map]);
   return null;
@@ -122,7 +129,13 @@ export function MapView({ round, pendingGuess, onPlace }: Props) {
               fillColor: '#dc2626',
               fillOpacity: 0.95,
             }}
-          />
+          >
+            {/* Stick the answer's name right on the spot so the map itself teaches
+                where it is. */}
+            <Tooltip permanent direction="top" offset={[0, -8]} className="truth-label">
+              {round.place.name}
+            </Tooltip>
+          </CircleMarker>
           {guess && (
             <>
               <Polyline

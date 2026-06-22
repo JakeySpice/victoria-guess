@@ -5,37 +5,53 @@ import { ScoreBar } from './components/ScoreBar';
 import { ResultModal } from './components/ResultModal';
 import { SummaryScreen } from './components/SummaryScreen';
 import { useGame } from './hooks/useGame';
-import { useHighScore } from './hooks/useHighScores';
+import { useProgress } from './hooks/useProgress';
+import { summarise } from './game/GameEngine';
 import { TIER_LABELS } from './game/types';
 import type { LatLng } from './game/types';
+import type { PlaceStat } from './game/progress';
 
 export default function App() {
   const game = useGame();
-  const { best, submit, reset: resetBest } = useHighScore();
+  const { summary, masteries, getPlaceStat, recordRound, recordGame, reset } =
+    useProgress();
   const [pendingGuess, setPendingGuess] = useState<LatLng | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
+  // Snapshot of the current place's record *before* this round, so the reveal
+  // can show "you usually land X km off" without counting the round twice.
+  const [priorStat, setPriorStat] = useState<PlaceStat | undefined>(undefined);
   const recordedRef = useRef(false);
 
-  // Record the session total exactly once when the game finishes.
+  // Record the finished session exactly once (game log + new-best flag).
   useEffect(() => {
     if (game.state.status === 'finished') {
       if (!recordedRef.current) {
         recordedRef.current = true;
-        setIsNewBest(submit(game.state.totalScore));
+        const stats = summarise(game.state);
+        setIsNewBest(game.state.totalScore > summary.bestGame);
+        recordGame({
+          score: game.state.totalScore,
+          avgKm: stats.avgDistanceKm ?? 0,
+          bullseyes: stats.bullseyes,
+          rounds: stats.rounds,
+          at: Date.now(),
+        });
       }
     } else {
       recordedRef.current = false;
     }
-  }, [game.state.status, game.state.totalScore, submit]);
+  }, [game.state, summary.bestGame, recordGame]);
 
   const handleStart = useCallback(() => {
     setPendingGuess(null);
+    setPriorStat(undefined);
     setIsNewBest(false);
     game.start();
   }, [game]);
 
   const handleHome = useCallback(() => {
     setPendingGuess(null);
+    setPriorStat(undefined);
     game.reset();
   }, [game]);
 
@@ -44,18 +60,31 @@ export default function App() {
   }, []);
 
   const handleSubmit = useCallback(() => {
-    if (pendingGuess) game.submitGuess(pendingGuess);
-  }, [game, pendingGuess]);
+    if (!pendingGuess) return;
+    const round = game.currentRound;
+    if (!round) return;
+    setPriorStat(getPlaceStat(round.place.id));
+    const outcome = game.submitGuess(pendingGuess);
+    if (outcome) {
+      recordRound(outcome.place.id, outcome.distanceKm, outcome.score);
+    }
+  }, [game, pendingGuess, getPlaceStat, recordRound]);
 
   const handleNext = useCallback(() => {
     setPendingGuess(null);
+    setPriorStat(undefined);
     game.nextRound();
   }, [game]);
 
   if (game.state.status === 'idle') {
     return (
       <div className="flex h-full flex-col bg-slate-100">
-        <StartScreen best={best} onStart={handleStart} onResetBest={resetBest} />
+        <StartScreen
+          summary={summary}
+          masteries={masteries}
+          onStart={handleStart}
+          onResetProgress={reset}
+        />
       </div>
     );
   }
@@ -65,7 +94,7 @@ export default function App() {
       <div className="flex h-full flex-col bg-slate-100">
         <SummaryScreen
           session={game.state}
-          best={best}
+          summary={summary}
           isNewBest={isNewBest}
           onPlayAgain={handleStart}
           onHome={handleHome}
@@ -92,7 +121,7 @@ export default function App() {
         roundNumber={game.roundNumber}
         totalRounds={game.totalRounds}
         totalScore={game.state.totalScore}
-        best={best}
+        best={summary.bestGame}
       />
 
       <div className={`relative flex-1 ${revealed ? '' : 'guessing'}`}>
@@ -115,7 +144,12 @@ export default function App() {
         )}
 
         {revealed && (
-          <ResultModal round={round} onNext={handleNext} isLast={isLast} />
+          <ResultModal
+            round={round}
+            priorStat={priorStat}
+            onNext={handleNext}
+            isLast={isLast}
+          />
         )}
       </div>
 

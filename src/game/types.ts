@@ -8,7 +8,6 @@ export interface Place {
   lng: number;
   tier: Tier;
   region: string;
-  hints: [string, string, string];
 }
 
 export const TIER_LABELS: Record<Tier, string> = {
