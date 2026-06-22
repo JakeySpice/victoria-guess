@@ -1,5 +1,18 @@
 export type Tier = 'city' | 'suburb' | 'region' | 'smalltown';
 
+export type RegionId =
+  | 'inner-metro'
+  | 'northern-metro'
+  | 'southern-metro'
+  | 'eastern-metro'
+  | 'western-metro'
+  | 'barwon-south-west'
+  | 'grampians'
+  | 'loddon-mallee'
+  | 'hume'
+  | 'goulburn'
+  | 'gippsland';
+
 export interface Place {
   id: string;
   name: string;
@@ -7,7 +20,8 @@ export interface Place {
   lat: number;
   lng: number;
   tier: Tier;
-  region: string;
+  region: RegionId;
+  scaleKm: number;
 }
 
 export const TIER_LABELS: Record<Tier, string> = {
@@ -37,17 +51,28 @@ export interface RoundState {
 
 export type SessionStatus = 'idle' | 'playing' | 'finished';
 
+export type GameMode =
+  | 'quick'
+  | 'review'
+  | 'region'
+  | 'discovery'
+  | 'daily'
+  | 'endless';
+
 export interface SessionStats {
   rounds: number;
   totalScore: number;
   bestDistanceKm: number | null;
   avgDistanceKm: number | null;
   bullseyes: number;
+  failed: boolean;
 }
 
 export interface SessionState {
   status: SessionStatus;
+  mode: GameMode;
   rounds: RoundState[];
   currentIndex: number;
   totalScore: number;
+  failed: boolean;
 }

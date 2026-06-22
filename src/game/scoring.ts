@@ -65,6 +65,28 @@ export function formatKm(km: number): string {
   return km < 10 ? km.toFixed(1) : String(Math.round(km));
 }
 
+/** Fast seeded PRNG (mulberry32) — deterministic draw for the Daily challenge. */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Hash an arbitrary string into a 32-bit seed for `mulberry32`. */
+export function hashStringToSeed(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 /**
  * Well-known reference points used to describe where the answer sits
  * (e.g. "≈ 95 km west of Ballarat"). Kept short and spread across the state

@@ -4,6 +4,7 @@ import { TIER_LABELS } from '../game/types';
 import type { RoundState } from '../game/types';
 import { masteryFor, MASTERY_LABELS } from '../game/progress';
 import type { PlaceStat } from '../game/progress';
+import { scaleKmFor } from '../game/places';
 
 interface Props {
   round: RoundState;
@@ -30,7 +31,10 @@ export function ResultModal({ round, priorStat, onNext, isLast }: Props) {
   const plays = (priorStat?.plays ?? 0) + 1;
   const avgKm =
     ((priorStat?.totalKm ?? 0) + km) / plays;
-  const mastery = MASTERY_LABELS[masteryFor(avgKm)];
+  const mastery =
+    priorStat && priorStat.plays > 0
+      ? MASTERY_LABELS[masteryFor(priorStat.emaKm / scaleKmFor(place))]
+      : null;
 
   return (
     // Bottom sheet — deliberately does NOT cover the map, so the labelled answer
@@ -73,7 +77,7 @@ export function ResultModal({ round, priorStat, onNext, isLast }: Props) {
               <span className="font-semibold text-slate-700">
                 {formatKm(avgKm)} km
               </span>{' '}
-              off ({mastery}).
+              off{mastery ? ` (${mastery})` : ''}.
             </span>
           )}
         </p>

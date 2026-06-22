@@ -36,6 +36,8 @@ export function SummaryScreen({
 }: Props) {
   const stats = summarise(session);
   const maxPossible = SCORING.ROUNDS_PER_SESSION * SCORING.MAX_ROUND_POINTS;
+  const endlessFailed = session.mode === 'endless' && session.failed;
+  const survived = session.rounds.length;
 
   // Compare this game to your form *before* it (the just-finished game is the
   // last entry in recentScores, so drop it to get a fair baseline).
@@ -46,9 +48,25 @@ export function SummaryScreen({
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 overflow-y-auto p-6">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
-        <h2 className="text-2xl font-bold text-slate-800">Game complete</h2>
+        {endlessFailed ? (
+          <>
+            <h2 className="text-2xl font-bold text-slate-800">Run ended</h2>
+            <p className="mt-1 text-sm font-semibold text-rose-500">
+              Streak broken
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              You survived{' '}
+              <span className="font-semibold text-slate-800">
+                {survived}
+              </span>{' '}
+              {survived === 1 ? 'round' : 'rounds'}.
+            </p>
+          </>
+        ) : (
+          <h2 className="text-2xl font-bold text-slate-800">Game complete</h2>
+        )}
 
-        {isNewBest && (
+        {isNewBest && !endlessFailed && (
           <div className="mt-2 inline-block rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
             🏆 New best!
           </div>
@@ -56,9 +74,11 @@ export function SummaryScreen({
 
         <div className="mt-3 text-5xl font-extrabold text-emerald-600">
           {session.totalScore}
-          <span className="ml-2 align-middle text-base font-medium text-slate-400">
-            / {maxPossible}
-          </span>
+          {endlessFailed ? null : (
+            <span className="ml-2 align-middle text-base font-medium text-slate-400">
+              / {maxPossible}
+            </span>
+          )}
         </div>
 
         <p className="text-sm text-slate-500">

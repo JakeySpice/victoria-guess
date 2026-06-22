@@ -10,11 +10,22 @@ import { summarise } from './game/GameEngine';
 import { TIER_LABELS } from './game/types';
 import type { LatLng } from './game/types';
 import type { PlaceStat } from './game/progress';
+import type { SelectRoundsOptions } from './game/GameEngine';
 
 export default function App() {
-  const game = useGame();
-  const { summary, masteries, getPlaceStat, recordRound, recordGame, reset } =
-    useProgress();
+  const {
+    progress,
+    summary,
+    masteries,
+    coverage,
+    getPlaceStat,
+    recordRound,
+    recordGame,
+    reset,
+    exportProgress,
+    importProgress,
+  } = useProgress();
+  const game = useGame(progress);
   const [pendingGuess, setPendingGuess] = useState<LatLng | null>(null);
   const [isNewBest, setIsNewBest] = useState(false);
   // Snapshot of the current place's record *before* this round, so the reveal
@@ -42,12 +53,15 @@ export default function App() {
     }
   }, [game.state, summary.bestGame, recordGame]);
 
-  const handleStart = useCallback(() => {
-    setPendingGuess(null);
-    setPriorStat(undefined);
-    setIsNewBest(false);
-    game.start();
-  }, [game]);
+  const handleStart = useCallback(
+    (opts: SelectRoundsOptions = { mode: 'quick' }) => {
+      setPendingGuess(null);
+      setPriorStat(undefined);
+      setIsNewBest(false);
+      game.start(opts);
+    },
+    [game],
+  );
 
   const handleHome = useCallback(() => {
     setPendingGuess(null);
@@ -82,8 +96,11 @@ export default function App() {
         <StartScreen
           summary={summary}
           masteries={masteries}
+          coverage={coverage}
           onStart={handleStart}
           onResetProgress={reset}
+          onExport={exportProgress}
+          onImport={importProgress}
         />
       </div>
     );

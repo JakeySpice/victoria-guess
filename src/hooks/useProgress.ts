@@ -1,10 +1,15 @@
 import { useCallback, useMemo, useState } from 'react';
+import { PLACES } from '../game/places';
 import {
+  coverageStats,
   emptyProgress,
+  exportProgress as exportProgressFn,
+  importProgress as importProgressFn,
   loadProgress,
   placeMasteries,
   recordGame as recordGameFn,
   recordRound as recordRoundFn,
+  regionalRollup,
   saveProgress,
   summariseProgress,
 } from '../game/progress';
@@ -47,11 +52,44 @@ export function useProgress() {
 
   const summary = useMemo(() => summariseProgress(progress), [progress]);
   const masteries = useMemo(() => placeMasteries(progress), [progress]);
+  const coverage = useMemo(
+    () => coverageStats(progress, PLACES.length),
+    [progress],
+  );
+  const regionalRollupMemo = useMemo(() => regionalRollup(progress), [progress]);
 
   const getPlaceStat = useCallback(
     (id: string): PlaceStat | undefined => progress.places[id],
     [progress.places],
   );
 
-  return { summary, masteries, getPlaceStat, recordRound, recordGame, reset };
+  const exportProgress = useCallback(
+    () => exportProgressFn(progress),
+    [progress],
+  );
+
+  const importProgress = useCallback(
+    (json: string): boolean => {
+      const imported = importProgressFn(json);
+      if (!imported) return false;
+      saveProgress(imported);
+      setProgress(imported);
+      return true;
+    },
+    [],
+  );
+
+  return {
+    progress,
+    summary,
+    masteries,
+    coverage,
+    regionalRollup: regionalRollupMemo,
+    getPlaceStat,
+    recordRound,
+    recordGame,
+    reset,
+    exportProgress,
+    importProgress,
+  };
 }

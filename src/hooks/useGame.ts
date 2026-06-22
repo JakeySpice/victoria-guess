@@ -3,18 +3,24 @@ import {
   advanceToNextRound,
   createSession,
   initialSession,
+  selectRounds,
   submitGuess as submitGuessEngine,
 } from '../game/GameEngine';
-import type { GuessOutcome } from '../game/GameEngine';
+import type { GuessOutcome, SelectRoundsOptions } from '../game/GameEngine';
 import { SCORING } from '../game/scoring';
+import { emptyProgress } from '../game/progress';
+import type { Progress } from '../game/progress';
 import type { LatLng, SessionState } from '../game/types';
 
-export function useGame() {
+export function useGame(progress: Progress = emptyProgress()) {
   const [state, setState] = useState<SessionState>(() => initialSession());
 
-  const start = useCallback(() => {
-    setState(createSession());
-  }, []);
+  const start = useCallback(
+    (opts: SelectRoundsOptions = { mode: 'quick' }) => {
+      setState(createSession(progress, opts));
+    },
+    [progress],
+  );
 
   const reset = useCallback(() => {
     setState(initialSession());
@@ -42,10 +48,14 @@ export function useGame() {
     state,
     currentRound,
     roundNumber: state.currentIndex + 1,
-    totalRounds: SCORING.ROUNDS_PER_SESSION,
+    totalRounds: state.rounds.length || SCORING.ROUNDS_PER_SESSION,
+    mode: state.mode,
+    isEndless: state.mode === 'endless',
+    failed: state.failed,
     start,
     reset,
     submitGuess,
     nextRound,
+    selectRounds: (opts: SelectRoundsOptions) => selectRounds(progress, opts),
   };
 }
