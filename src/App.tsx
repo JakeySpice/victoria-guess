@@ -172,7 +172,7 @@ export default function App() {
   }
 
   const revealed = round.status === 'revealed';
-  const isLast = game.roundNumber >= game.totalRounds;
+  const isLast = game.roundNumber >= game.totalRounds || game.state.failed;
 
   return (
     <div className="flex h-full flex-col bg-slate-100">
@@ -181,6 +181,7 @@ export default function App() {
         totalRounds={game.totalRounds}
         totalScore={game.state.totalScore}
         best={summary.bestGame}
+        mode={game.state.mode}
       />
 
       <div className={`relative flex-1 ${revealed ? '' : 'guessing'}`}>

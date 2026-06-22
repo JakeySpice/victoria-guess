@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { summarise } from '../game/GameEngine';
 import {
   SCORING,
@@ -29,6 +30,22 @@ function mean(ns: number[]): number {
   return ns.reduce((a, b) => a + b, 0) / ns.length;
 }
 
+const TONE_EMOJI: Record<RatingTone, string> = {
+  great: '🟢',
+  good: '🟡',
+  ok: '🟠',
+  poor: '🔴',
+};
+
+function buildShareText(session: SessionState): string {
+  const date = session.dailySeed ?? '';
+  const squares = session.rounds
+    .filter((r) => r.distanceKm !== null)
+    .map((r) => TONE_EMOJI[ratingForDistance(r.distanceKm!).tone])
+    .join('');
+  return `Victoria Guess Daily · ${date}\n${squares}\n${session.totalScore} pts`;
+}
+
 export function SummaryScreen({
   session,
   summary,
@@ -38,10 +55,14 @@ export function SummaryScreen({
   onPlayAgain,
   onHome,
 }: Props) {
+  const [copied, setCopied] = useState(false);
   const stats = summarise(session);
   const maxPossible = SCORING.ROUNDS_PER_SESSION * SCORING.MAX_ROUND_POINTS;
   const endlessFailed = session.mode === 'endless' && session.failed;
-  const survived = session.rounds.length;
+  const isEndless = session.mode === 'endless';
+  const isDaily = session.mode === 'daily';
+  const survived = session.rounds.filter((r) => r.status === 'revealed').length;
+  const scorePerRound = stats.rounds > 0 ? Math.round(session.totalScore / stats.rounds) : 0;
 
   // Compare this game to your form *before* it (the just-finished game is the
   // last entry in recentScores, so drop it to get a fair baseline).
@@ -56,6 +77,17 @@ export function SummaryScreen({
   const handleHome = () => {
     onDismissMilestones();
     onHome();
+  };
+
+  const handleShare = async () => {
+    const text = buildShareText(session);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable */
+    }
   };
 
   return (
@@ -141,10 +173,14 @@ export function SummaryScreen({
                 : `${formatKm(stats.avgDistanceKm)} km`
             }
           />
-          <Stat
-            label={`Avg · last ${RECENT_WINDOW}`}
-            value={summary.recentAvg !== null ? Math.round(summary.recentAvg) : '—'}
-          />
+          {isEndless ? (
+            <Stat label="Score / round" value={scorePerRound} />
+          ) : (
+            <Stat
+              label={`Avg · last ${RECENT_WINDOW}`}
+              value={summary.recentAvg !== null ? Math.round(summary.recentAvg) : '—'}
+            />
+          )}
         </div>
 
         {/* Round-by-round recap — the places to revisit and study. */}
@@ -152,7 +188,7 @@ export function SummaryScreen({
           <div className="text-xs uppercase tracking-wide text-slate-500">
             This round's places
           </div>
-          <ul className="mt-2 divide-y divide-slate-100">
+          <ul className={`mt-2 divide-y divide-slate-100 ${isEndless ? 'max-h-48 overflow-y-auto' : ''}`}>
             {session.rounds.map((r) => {
               const km = r.distanceKm ?? 0;
               const rating = ratingForDistance(km);
@@ -175,6 +211,15 @@ export function SummaryScreen({
             })}
           </ul>
         </div>
+
+        {isDaily && (
+          <button
+            onClick={handleShare}
+            className="mt-4 w-full rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+          >
+            {copied ? '✓ Copied to clipboard' : 'Share daily result'}
+          </button>
+        )}
 
         <div className="mt-6 flex gap-3">
           <button

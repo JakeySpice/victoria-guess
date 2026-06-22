@@ -75,4 +75,6 @@ export interface SessionState {
   currentIndex: number;
   totalScore: number;
   failed: boolean;
+  /** For daily mode: the date seed (YYYY-MM-DD) used to generate the session. */
+  dailySeed?: string;
 }

@@ -206,6 +206,7 @@ export function createSession(
     currentIndex: 0,
     totalScore: 0,
     failed: false,
+    dailySeed: opts.mode === 'daily' ? String(opts.seed ?? '') : undefined,
   };
 }
 
@@ -252,14 +253,13 @@ export function submitGuess(
   const rounds = state.rounds.slice();
   rounds[idx] = updated;
 
-  let nextStatus: SessionStatus = state.status;
   let failed = state.failed;
   if (
     state.mode === 'endless' &&
+    !failed &&
     ratingForDistance(distanceKm).tone === 'poor' &&
     distanceKm > ENDLESS_FAIL_KM
   ) {
-    nextStatus = 'finished';
     failed = true;
   }
 
@@ -268,7 +268,6 @@ export function submitGuess(
       ...state,
       rounds,
       totalScore: state.totalScore + score,
-      status: nextStatus,
       failed,
     },
     outcome: { distanceKm, score, place: round.place },
